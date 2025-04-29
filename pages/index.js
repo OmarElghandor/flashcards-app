@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 
 const defaultConversation = {
   conversation: [
@@ -35,78 +36,25 @@ export default function Home() {
     if (savedFlash) setSavedFlashcards(JSON.parse(savedFlash));
   }, []);
 
-  const speak = (text) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "pt-PT";
-    speechSynthesis.speak(utterance);
-  };
-
-  const saveConversation = () => {
-    const title = prompt("Enter a title for this conversation:");
-    if (!title) return;
-    const newConvos = [...savedConversations, { id: uuidv4(), title, conversation, conversationInput }];
-    setSavedConversations(newConvos);
-    localStorage.setItem("savedConversations", JSON.stringify(newConvos));
-  };
-
-  const saveFlashcards = () => {
-    const title = prompt("Enter a title for these flashcards:");
-    if (!title) return;
-    const newSet = [...savedFlashcards, { id: uuidv4(), title, flashcards, flashcardInput }];
-    setSavedFlashcards(newSet);
-    localStorage.setItem("savedFlashcards", JSON.stringify(newSet));
-  };
-
-  const deleteConversation = (id) => {
-    const updated = savedConversations.filter(c => c.id !== id);
-    setSavedConversations(updated);
-    localStorage.setItem("savedConversations", JSON.stringify(updated));
-  };
-
-  const deleteFlashcards = (id) => {
-    const updated = savedFlashcards.filter(f => f.id !== id);
-    setSavedFlashcards(updated);
-    localStorage.setItem("savedFlashcards", JSON.stringify(updated));
-  };
-
-  const loadConversation = (conv) => {
-    setConversation(conv.conversation);
-    setConversationInput(conv.conversationInput || "");
-  };
-
-  const loadFlashcards = (fc) => {
-    setFlashcards(fc.flashcards);
-    setFlashcardInput(fc.flashcardInput || JSON.stringify(fc.flashcards, null, 2));
-  };
-
-  const handleFlashcardFeedback = (verb, positive) => {
-    const now = Date.now();
-    const current = flashcardStates[verb] || { interval: 1, lastSeen: now };
-    const nextInterval = positive ? current.interval * 2 : 1;
-    const updated = {
-      ...flashcardStates,
-      [verb]: { interval: nextInterval, lastSeen: now }
-    };
-    setFlashcardStates(updated);
-    localStorage.setItem("flashcardStates", JSON.stringify(updated));
-  };
-
-  const updateConversationFromInput = () => {
+  const speak = async (text) => {
     try {
-      const parsed = JSON.parse(conversationInput);
-      setConversation(parsed);
-    } catch (e) {
-      alert("Invalid JSON");
-    }
-  };
-
-  const updateFlashcardsFromInput = () => {
-    try {
-      const parsed = JSON.parse(flashcardInput);
-      setFlashcards(parsed);
-      setFlashcardInput(JSON.stringify(parsed, null, 2));
-    } catch (e) {
-      alert("Invalid JSON");
+      const response = await axios.post(
+        'https://texttospeech.googleapis.com/v1/text:synthesize?key=AIzaSyB3Gy3ERt0kH2VfcQM0vY4anhKUn4nnTmU',
+        {
+          input: { text },
+          voice: {
+            languageCode: 'pt-PT',
+            name: 'pt-PT-Standard-A'
+          },
+          audioConfig: { audioEncoding: 'MP3' }
+        }
+      );
+      const audioContent = response.data.audioContent;
+      const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+      audio.play();
+    } catch (err) {
+      console.error('Error using Google TTS:', err);
+      alert('Failed to fetch audio from Google TTS.');
     }
   };
 
@@ -127,7 +75,14 @@ export default function Home() {
             value={conversationInput}
             onChange={(e) => setConversationInput(e.target.value)}
           ></textarea>
-          <button className="mb-2 bg-blue-500 text-white px-4 py-2 rounded" onClick={updateConversationFromInput}>
+          <button className="mb-2 bg-blue-500 text-white px-4 py-2 rounded" onClick={() => {
+            try {
+              const parsed = JSON.parse(conversationInput);
+              setConversation(parsed);
+            } catch (e) {
+              alert("Invalid JSON");
+            }
+          }}>
             Load Conversation JSON
           </button>
           <div className="space-y-4">
@@ -141,7 +96,13 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <button className="mt-4 bg-blue-500 text-white px-4 py-2 rounded" onClick={saveConversation}>
+          <button className="mt-4 bg-blue-500 text-white px-4 py-2 rounded" onClick={() => {
+            const title = prompt("Enter a title for this conversation:");
+            if (!title) return;
+            const newConvos = [...savedConversations, { id: uuidv4(), title, conversation, conversationInput }];
+            setSavedConversations(newConvos);
+            localStorage.setItem("savedConversations", JSON.stringify(newConvos));
+          }}>
             Save This Conversation
           </button>
         </div>
@@ -155,63 +116,30 @@ export default function Home() {
               <li key={conv.id} className="flex justify-between items-center bg-white p-3 rounded shadow">
                 <span>{conv.title}</span>
                 <div className="space-x-2">
-                  <button className="bg-green-500 text-white px-2 py-1 rounded" onClick={() => loadConversation(conv)}>
+                  <button
+                    className="bg-green-500 text-white px-2 py-1 rounded"
+                    onClick={() => {
+                      setConversation(conv.conversation);
+                      setConversationInput(conv.conversationInput || "");
+                      setPage("conversation");
+                    }}
+                  >
                     View
                   </button>
-                  <button className="bg-red-500 text-white px-2 py-1 rounded" onClick={() => deleteConversation(conv.id)}>
+                  <button
+                    className="bg-red-500 text-white px-2 py-1 rounded"
+                    onClick={() => {
+                      const updated = savedConversations.filter(c => c.id !== conv.id);
+                      setSavedConversations(updated);
+                      localStorage.setItem("savedConversations", JSON.stringify(updated));
+                    }}
+                  >
                     Delete
                   </button>
                 </div>
               </li>
             ))}
           </ul>
-          <h2 className="text-xl mb-2">Saved Flashcards</h2>
-          <ul className="space-y-2">
-            {savedFlashcards.sort((a, b) => a.id.localeCompare(b.id)).map((fc) => (
-              <li key={fc.id} className="flex justify-between items-center bg-white p-3 rounded shadow">
-                <span>{fc.title}</span>
-                <div className="space-x-2">
-                  <button className="bg-green-500 text-white px-2 py-1 rounded" onClick={() => loadFlashcards(fc)}>
-                    View
-                  </button>
-                  <button className="bg-red-500 text-white px-2 py-1 rounded" onClick={() => deleteFlashcards(fc.id)}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {page === "flashcards" && (
-        <div>
-          <textarea
-            className="w-full p-2 border rounded mb-2"
-            rows="6"
-            placeholder="Paste flashcards JSON here"
-            value={flashcardInput}
-            onChange={(e) => setFlashcardInput(e.target.value)}
-          ></textarea>
-          <button className="mb-2 bg-blue-500 text-white px-4 py-2 rounded" onClick={updateFlashcardsFromInput}>
-            Load Flashcards JSON
-          </button>
-          <div className="space-y-4">
-            {flashcards.map((fc, idx) => (
-              <div key={idx} className="bg-white p-4 rounded shadow">
-                <p><strong>{fc.verb}</strong> - {fc.translation}</p>
-                <p>{fc.example_pt} <button onClick={() => speak(fc.example_pt)}>🔊</button></p>
-                <p className="text-sm text-gray-500">{fc.example_en}</p>
-                <div className="mt-2 space-x-2">
-                  <button onClick={() => handleFlashcardFeedback(fc.verb, true)} className="bg-green-400 text-white px-2 py-1 rounded">👍</button>
-                  <button onClick={() => handleFlashcardFeedback(fc.verb, false)} className="bg-red-400 text-white px-2 py-1 rounded">👎</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="mt-4 bg-blue-500 text-white px-4 py-2 rounded" onClick={saveFlashcards}>
-            Save These Flashcards
-          </button>
         </div>
       )}
     </div>
